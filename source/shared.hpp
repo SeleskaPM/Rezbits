@@ -93,7 +93,7 @@ namespace rez::impl {
         if(amount < 2) return value;
 
         constexpr int size_in_bits {static_cast<int>(sizeof(T)) * 8};
-        if(amount > size_in_bits) throw rez::Exception {rez::Error::bug};
+        if(amount > size_in_bits) throw Exception {Error::bug};
         if(amount == size_in_bits) return reverse_bits(value);
 
         using unsigned_type = std::make_unsigned_t<T>;
