@@ -4,7 +4,6 @@
 
 #include <vector>
 #include <array>
-#include <compare>
 
 namespace rez {
     std::vector<std::uint8_t> decompress_deflate(std::span<const std::uint8_t> deflate_data);
@@ -36,14 +35,28 @@ namespace rez::impl::deflate {
         7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13
     };
 
-    struct Huffman_code {
-        Huffman_code() noexcept {}
-        // just for emplace_back
-        Huffman_code(int a_code, int a_bit_length, int a_symbol) noexcept : code {a_code}, bit_length {a_bit_length}, symbol {a_symbol} {}
+    struct Huffman_entry {
+        Huffman_entry() noexcept {};
 
-        int code {0};
-        int bit_length {0};
-        int symbol {0};
+        enum class Category {
+            none, symbol, bridge
+        };
+
+        Category category {Category::none};
+        /* category == Category::symbol
+        *      value == a symbol
+        *      bits_to_consume == bit-length of the Huffman code corresponding to the symbol
+        *
+        * category == Category::bridge
+        *     value == an offset to some area of the decoding table
+        *     bits_to_consume == the bit-width of said area */
+        int value {0};
+        int bits_to_consume {0};
+    };
+
+    struct Decoding_table {
+        std::vector<Huffman_entry> entries;
+        int first_area_bitwidth;
     };
 
     using Deflate_bitstream = Bitstream<Bitstream_format::gif>;
@@ -52,13 +65,9 @@ namespace rez::impl::deflate {
     void decompress_fixed(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream);
     void decompress_dynamic(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream);
 
-    std::vector<Huffman_code> make_fixed_huffman_table(); // for literals and lengths
-    // used in decompress_dynamic
-    std::vector<Huffman_code> make_huffman_codes_from_bit_lengths(std::span<const int> bit_lengths);
-
-    // about fetch_symbol_in_fixed_block: only for literals and lengths
-    int fetch_symbol_in_fixed_block(const std::vector<Huffman_code>& huffman_codes, Deflate_bitstream& bitstream);
-    int fetch_symbol_in_dynamic_block(const std::vector<Huffman_code>& huffman_codes, Deflate_bitstream& bitstream);
-
+    // allocation_size == maximum possible number of entries in the decoding table
+    Decoding_table make_decoding_table_from_code_lengths(std::span<const int> code_lengths, int first_area_bitwidth, int allocation_size);
+    int fetch_symbol(const Decoding_table& decoding_table, Deflate_bitstream& bitstream);
+    void process_symbols(std::vector<std::uint8_t>& inflated_data, const Decoding_table& literal_length_alphabet, const Decoding_table& distance_alphabet, Deflate_bitstream& bitstream);
     void lz77_copy(std::vector<std::uint8_t>& inflated_data, const int length, const std::int32_t distance);
 }
