@@ -14,5 +14,6 @@
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".editorconfig" />
+    <None Include="Readme.md" />
   </ItemGroup>
 </Project>
