@@ -69,5 +69,5 @@ namespace rez::impl::deflate {
     Decoding_table make_decoding_table_from_code_lengths(std::span<const int> code_lengths, int first_area_bitwidth, int allocation_size);
     int fetch_symbol(const Decoding_table& decoding_table, Deflate_bitstream& bitstream);
     void process_symbols(std::vector<std::uint8_t>& inflated_data, const Decoding_table& literal_length_alphabet, const Decoding_table& distance_alphabet, Deflate_bitstream& bitstream);
-    void lz77_copy(std::vector<std::uint8_t>& inflated_data, const int length, const std::int32_t distance);
+    void lz77_copy(std::vector<std::uint8_t>& inflated_data, int length, const std::int32_t distance);
 }

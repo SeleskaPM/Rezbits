@@ -6,7 +6,7 @@ std::vector<std::uint8_t> rez::decompress_deflate(std::span<const std::uint8_t> 
 {
     impl::deflate::Deflate_bitstream bitstream {deflate_data};
     std::vector<std::uint8_t> inflated_data;
-    inflated_data.reserve(10000); // 10KB
+    inflated_data.reserve(15000); // 15KB
     int bfinal {0};
     int btype {0};
     do {
@@ -361,8 +361,26 @@ void rez::impl::deflate::process_symbols(std::vector<std::uint8_t>& inflated_dat
     }
 }
 
-void rez::impl::deflate::lz77_copy(std::vector<std::uint8_t>& inflated_data, const int length, const std::int32_t distance)
+void rez::impl::deflate::lz77_copy(std::vector<std::uint8_t>& inflated_data, int length, const std::int32_t distance)
 {
+    std::int64_t destination_index {static_cast<std::int64_t>(inflated_data.size())};
+    const std::int64_t copy_start_index {destination_index - distance};
+    inflated_data.resize(destination_index + length);
+
+    if(distance == 1) { std::memset(&inflated_data[destination_index], inflated_data[destination_index - 1], length); }
+    else if(length > distance) { // cyclic copy
+        while(length > distance) {
+            std::memcpy(&inflated_data[destination_index], &inflated_data[copy_start_index], distance);
+            destination_index += distance;
+            length -= distance;
+        }
+        std::memcpy(&inflated_data[destination_index], &inflated_data[copy_start_index], length);
+    }
+    else { // plain copy
+        std::memcpy(&inflated_data[destination_index], &inflated_data[copy_start_index], length);
+    }
+    
+    /*
     const std::size_t beginning_of_copy {inflated_data.size() - distance};
     std::size_t copy_from {beginning_of_copy};
 
@@ -374,4 +392,5 @@ void rez::impl::deflate::lz77_copy(std::vector<std::uint8_t>& inflated_data, con
             copy_from = beginning_of_copy;
         }
     }
+    */
 }
