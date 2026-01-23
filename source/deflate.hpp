@@ -54,8 +54,10 @@ namespace rez::impl::deflate {
         int bits_to_consume {0};
     };
 
+    /* this struct will act as a view into a mother buffer that will
+    * contain all entries for all alphabets */
     struct Decoding_table {
-        std::vector<Huffman_entry> entries;
+        std::span<Huffman_entry> entries;
         int first_area_bitwidth;
     };
 
@@ -63,10 +65,9 @@ namespace rez::impl::deflate {
 
     void decompress_uncompressed(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream);
     void decompress_fixed(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream);
-    void decompress_dynamic(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream);
+    void decompress_dynamic(std::vector<std::uint8_t>& inflated_data, std::vector<Huffman_entry>& mother_buffer, Deflate_bitstream& bitstream);
 
-    // allocation_size == maximum possible number of entries in the decoding table
-    Decoding_table make_decoding_table_from_code_lengths(std::span<const int> code_lengths, int first_area_bitwidth, int allocation_size);
+    int fill_decoding_table_from_code_lengths(std::span<const int> code_lengths, std::span<Huffman_entry> decoding_table, int first_area_bitwidth);
     int fetch_symbol(const Decoding_table& decoding_table, Deflate_bitstream& bitstream);
     void process_symbols(std::vector<std::uint8_t>& inflated_data, const Decoding_table& literal_length_alphabet, const Decoding_table& distance_alphabet, Deflate_bitstream& bitstream);
     void lz77_copy(std::vector<std::uint8_t>& inflated_data, int length, const std::int32_t distance);

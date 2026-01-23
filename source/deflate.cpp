@@ -6,9 +6,19 @@ std::vector<std::uint8_t> rez::decompress_deflate(std::span<const std::uint8_t> 
 {
     impl::deflate::Deflate_bitstream bitstream {deflate_data};
     std::vector<std::uint8_t> inflated_data;
-    inflated_data.reserve(15000); // 15KB
+    //inflated_data.reserve(15000); // 15KB
+    inflated_data.reserve(110596800); // only to test
     int bfinal {0};
     int btype {0};
+
+    /* 1444 is the sum of 852 and 592. 852 is the maximum number of
+    * entries that the decoding table for the literal+length alphabet
+    * can have when the bit-width of its first area for that alphabet
+    * is 9. 592 is the maximum for the decoding table of the distance
+    * alphabet when the bit-width of the first area of its decoding
+    * table is 6 */
+    std::vector<impl::deflate::Huffman_entry> mother_buffer(1444); // for dynamic blocks
+
     do {
         bfinal = bitstream.read_bits(1);
         btype = bitstream.read_bits(2);
@@ -21,7 +31,7 @@ std::vector<std::uint8_t> rez::decompress_deflate(std::span<const std::uint8_t> 
                 impl::deflate::decompress_fixed(inflated_data, bitstream);
                 break;
             case 2: // dynamic Huffman codes
-                impl::deflate::decompress_dynamic(inflated_data, bitstream);
+                impl::deflate::decompress_dynamic(inflated_data, mother_buffer, bitstream);
                 break;
             default:
                 throw Exception {Error::bad_formed_data};
@@ -54,16 +64,26 @@ void rez::impl::deflate::decompress_fixed(std::vector<std::uint8_t>& inflated_da
     for(int i = 144; i < 256; ++i) { code_lengths.push_back(9); }
     for(int i = 256; i < 280; ++i) { code_lengths.push_back(7); }
     for(int i = 280; i < 288; ++i) { code_lengths.push_back(8); }
-    Decoding_table literal_length_alphabet {make_decoding_table_from_code_lengths(code_lengths, 9, 512)};
+    
+    // mother buffer that contains all entries for all alphabets
+    std::vector<Huffman_entry> mother_buffer;
+    mother_buffer.resize(544); // 512 + 32
+
+    Decoding_table literal_length_alphabet;
+    literal_length_alphabet.entries = std::span<Huffman_entry> {mother_buffer.begin(), 512};
+    literal_length_alphabet.first_area_bitwidth = fill_decoding_table_from_code_lengths(code_lengths, literal_length_alphabet.entries, 9);
 
     std::vector<int> code_lengths_2;
     code_lengths_2.resize(30, 5);
-    Decoding_table distance_alphabet {make_decoding_table_from_code_lengths(code_lengths_2, 5, 32)};
+
+    Decoding_table distance_alphabet;
+    distance_alphabet.entries = std::span<Huffman_entry> {mother_buffer.begin() + 512, 32};
+    distance_alphabet.first_area_bitwidth = fill_decoding_table_from_code_lengths(code_lengths_2, distance_alphabet.entries, 5);
 
     process_symbols(inflated_data, literal_length_alphabet, distance_alphabet, bitstream);
 }
 
-void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_data, Deflate_bitstream& bitstream)
+void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_data, std::vector<Huffman_entry>& mother_buffer, Deflate_bitstream& bitstream)
 {
     const int hlit {static_cast<int>(bitstream.read_bits(5) + 257)};
     const int hdist {static_cast<int>(bitstream.read_bits(5) + 1)};
@@ -80,7 +100,12 @@ void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_
     for(int i = 0; i < hclen; ++i) {
         code_length_alphabet_code_lengths[ordered_indexes[i]] = bitstream.read_bits(3);
     }
-    Decoding_table code_length_alphabet {make_decoding_table_from_code_lengths(code_length_alphabet_code_lengths, 7, 128)};
+
+    /* 128 is the maximum number of entries for the decoding table of
+    * the code-length alphabet when using 7 as the bit-width */
+    Decoding_table code_length_alphabet;
+    code_length_alphabet.entries = std::span<Huffman_entry>(mother_buffer.begin(), 128);
+    code_length_alphabet.first_area_bitwidth = fill_decoding_table_from_code_lengths(code_length_alphabet_code_lengths, code_length_alphabet.entries, 7);
 
     // code-lengths of both the literal+length alphabet and the distance alphabet
     std::vector<int> alphabets_code_lengths;
@@ -113,7 +138,9 @@ void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_
     * used by zlib for the literal+length alphabet. I could use the
     * same value that zlib-ng uses, but I decided to be more
     * conservative with memory. */
-    Decoding_table literal_length_alphabet(make_decoding_table_from_code_lengths(literal_length_alphabet_code_lengths, 9, 852));
+    Decoding_table literal_length_alphabet;
+    literal_length_alphabet.entries = std::span<Huffman_entry>(mother_buffer.begin(), 852);
+    literal_length_alphabet.first_area_bitwidth = fill_decoding_table_from_code_lengths(literal_length_alphabet_code_lengths, literal_length_alphabet.entries, 9);
     /* this is so silly: the case in where the amount of code-lengths
     * for the distance alphabet is 1 and that lonely bit-length happens
     * to be zero is valid, it means that the data to decompress is all
@@ -127,7 +154,10 @@ void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_
     * used by zlib for the distance alphabet. I could use the same
     * value that zlib-ng uses, but I decided to be more conservative
     * with memory */
-    else { distance_alphabet = make_decoding_table_from_code_lengths(distance_alphabet_code_lengths, 6, 592); }
+    else {
+        distance_alphabet.entries = std::span<Huffman_entry>(mother_buffer.begin() + 852, 592);
+        distance_alphabet.first_area_bitwidth = fill_decoding_table_from_code_lengths(distance_alphabet_code_lengths, distance_alphabet.entries, 6);
+    }
 
     if(distance_alphabet.entries.empty()) {
         int symbol {fetch_symbol(literal_length_alphabet, bitstream)};
@@ -140,7 +170,7 @@ void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_
     else { process_symbols(inflated_data, literal_length_alphabet, distance_alphabet, bitstream); }
 }
 
-rez::impl::deflate::Decoding_table rez::impl::deflate::make_decoding_table_from_code_lengths(std::span<const int> code_lengths, int first_area_bitwidth, int allocation_size)
+int rez::impl::deflate::fill_decoding_table_from_code_lengths(std::span<const int> code_lengths, std::span<Huffman_entry> decoding_table, int first_area_bitwidth)
 {
     /* The purpose of this function is to construct a decoding table
     * that can be indexed with raw bits from the DEFLATE stream and
@@ -211,9 +241,6 @@ rez::impl::deflate::Decoding_table rez::impl::deflate::make_decoding_table_from_
     * becomes greater than the bit-width of the first area */
     int current_prefix {0x7FFF}; // impossible initial value on purpose
     const int prefix_mask {(1 << first_area_bitwidth) - 1};
-    Decoding_table decoding_table;
-    decoding_table.first_area_bitwidth = first_area_bitwidth;
-    decoding_table.entries.resize(allocation_size);
 
     const int actual_symbol_count {static_cast<int>(symbols.size())};
     for(int i = 0; i < actual_symbol_count; ++i) {
@@ -267,7 +294,7 @@ rez::impl::deflate::Decoding_table rez::impl::deflate::make_decoding_table_from_
         const int b {1 << (current_code_bit_length - bits_consumed_by_previous_area)};
         do {
             a -= b;
-            decoding_table.entries[area_offset + (a + code_bits)] = entry;
+            decoding_table[area_offset + (a + code_bits)] = entry;
         } while(a != 0);
 
         /* this code goes to the next Huffman code (bit-reversed).
@@ -314,11 +341,10 @@ rez::impl::deflate::Decoding_table rez::impl::deflate::make_decoding_table_from_
             entry.category = Huffman_entry::Category::bridge;
             entry.value = area_offset;
             entry.bits_to_consume = current_area_bitwidth;
-            decoding_table.entries[current_prefix] = entry;
+            decoding_table[current_prefix] = entry;
         }
     }
-
-    return decoding_table;
+    return first_area_bitwidth;
 }
 
 int rez::impl::deflate::fetch_symbol(const Decoding_table& decoding_table, Deflate_bitstream& bitstream)
@@ -378,19 +404,5 @@ void rez::impl::deflate::lz77_copy(std::vector<std::uint8_t>& inflated_data, int
     }
     else { // plain copy
         std::memcpy(&inflated_data[destination_index], &inflated_data[copy_start_index], length);
-    }
-    
-    /*
-    const std::size_t beginning_of_copy {inflated_data.size() - distance};
-    std::size_t copy_from {beginning_of_copy};
-
-    inflated_data.reserve(inflated_data.size() + length);
-    for(int i = 0; i < length; ++i) {
-        inflated_data.push_back(inflated_data[copy_from]);
-        ++copy_from;
-        if(copy_from == inflated_data.size()) {
-            copy_from = beginning_of_copy;
-        }
-    }
-    */
+    }    
 }
