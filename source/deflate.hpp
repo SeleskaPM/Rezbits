@@ -36,8 +36,6 @@ namespace rez::impl::deflate {
     };
 
     struct Huffman_entry {
-        Huffman_entry() noexcept {};
-
         enum class Category {
             none, symbol, bridge
         };
