@@ -669,7 +669,7 @@ void rez::impl::deflate::decompress_dynamic(std::vector<std::uint8_t>& inflated_
         }
         else { throw Exception {Error::bad_formed_data}; }
     }
-    if(alphabets_code_lengths.size() > hlit_hdist) throw Exception {Error::bad_formed_data};
+    if(alphabets_code_lengths.size() != hlit_hdist) throw Exception {Error::bad_formed_data};
 
     std::span<const int> literal_length_alphabet_code_lengths(alphabets_code_lengths.begin(), hlit);
     /* the bit-width of the first area is 9 because that is the value
