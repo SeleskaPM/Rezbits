@@ -6,8 +6,8 @@ std::vector<std::uint8_t> rez::decompress_deflate(std::span<const std::uint8_t> 
 {
     impl::deflate::Deflate_bitstream bitstream {deflate_data};
     std::vector<std::uint8_t> inflated_data;
-    //inflated_data.reserve(25000); // 25KB
-    inflated_data.reserve(110596800); // only to test
+    inflated_data.reserve(25000); // 25KB
+    //inflated_data.reserve(110596800); // only to test
 
     /* 1444 is the sum of 852 and 592. 852 is the maximum number of
     * entries that the decoding table for the literal+length alphabet
