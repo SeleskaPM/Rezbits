@@ -179,7 +179,14 @@ namespace rez::impl {
     template<Bitstream_format format>
     class Bitstream {
     public:
-        Bitstream(std::span<const std::uint8_t> source) noexcept : m_source {source}, m_last_valid_index {source.size() - 1u} {}
+        Bitstream(std::span<const std::uint8_t> source) noexcept
+            : m_source {source},
+            m_last_valid_index {static_cast<std::int64_t>(source.size()) - 1},
+            m_bits_remaining {static_cast<std::int64_t>(source.size()) * 8}
+
+        {
+            // nothing
+        }
 
         std::int32_t read_bits(const int amount);
         std::int32_t peek_bits(const int amount);
@@ -187,13 +194,16 @@ namespace rez::impl {
         void skip_until_next_byte_boundary();
 
         std::span<const std::uint8_t> read_bytes(const int amount);
+
+        std::int64_t bits_remaining() { return m_bits_remaining; }
     private:
         // [verb]_bits_FORMAT
         //std::uint32_t read_bits_lsbit(const std::uint32_t amount);
 
         std::span<const std::uint8_t> m_source;
-        std::size_t m_current_byte_index {0u};
-        const std::size_t m_last_valid_index;
+        std::int64_t m_current_byte_index {0};
+        const std::int64_t m_last_valid_index;
+        std::int64_t m_bits_remaining;
         int m_useful_bits_in_current_byte {8};
     };
 }

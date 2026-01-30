@@ -66,21 +66,32 @@ std::int32_t rez::impl::Bitstream<format>::read_bits(const int amount)
         m_useful_bits_in_current_byte -= bits_to_take;
     }
 
+    m_bits_remaining -= amount;
     return result;
 }
 
 template<rez::impl::Bitstream_format format>
 std::int32_t rez::impl::Bitstream<format>::peek_bits(const int amount)
 {
-    const std::size_t copy1 {m_current_byte_index};
+    const std::int64_t copy1 {m_current_byte_index};
     const int copy2 {m_useful_bits_in_current_byte};
+    const std::int64_t copy3 {m_bits_remaining};
 
-    const std::int32_t result {read_bits(amount)};
-    // "go back in time"
-    m_current_byte_index = copy1;
-    m_useful_bits_in_current_byte = copy2;
+    try {
+        const std::int32_t result {read_bits(amount)};
+        // "go back in time"
+        m_current_byte_index = copy1;
+        m_useful_bits_in_current_byte = copy2;
+        m_bits_remaining = copy3;
 
-    return result;
+        return result;
+    }
+    catch(const std::exception& e) {
+        m_current_byte_index = copy1;
+        m_useful_bits_in_current_byte = copy2;
+        m_bits_remaining = copy3;
+        throw;
+    }
 }
 
 template<rez::impl::Bitstream_format format>
@@ -106,6 +117,8 @@ void rez::impl::Bitstream<format>::skip_bits(const int amount)
         bits_skipped += bits_to_skip;
         m_useful_bits_in_current_byte -= bits_to_skip;
     }
+
+    m_bits_remaining -= amount;
 }
 
 template<rez::impl::Bitstream_format format>
@@ -117,6 +130,7 @@ void rez::impl::Bitstream<format>::skip_until_next_byte_boundary()
     if(m_current_byte_index > m_last_valid_index) {
         throw Exception {Error::unexpected_eof};
     }
+    m_bits_remaining -= m_useful_bits_in_current_byte;
     m_useful_bits_in_current_byte = 8;
 }
 
@@ -138,6 +152,10 @@ std::span<const std::uint8_t> rez::impl::Bitstream<format>::read_bytes(const int
     }
     else { m_useful_bits_in_current_byte = 8; }
 
+    while(m_bits_remaining % 8 != 0) {
+        ++m_bits_remaining;
+    }
+    m_bits_remaining -= amount * 8;
     return result;
 }
 

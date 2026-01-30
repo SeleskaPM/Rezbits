@@ -63,7 +63,7 @@ void rez::impl::deflate::decompress_fixed(std::vector<std::uint8_t>& inflated_da
     * be used most of the time */
 
     std::vector<Huffman_entry> mother_buffer {
-        // does your editor have code folding? (⓿_⓿)
+        // does your editor have code folding? ;A;
         {Huffman_entry::Category::symbol, 256, 7},
         {Huffman_entry::Category::symbol, 80, 8},
         {Huffman_entry::Category::symbol, 16, 8},
@@ -898,7 +898,14 @@ int rez::impl::deflate::fill_decoding_table_from_code_lengths(std::span<const in
 
 int rez::impl::deflate::fetch_symbol(const Decoding_table& decoding_table, Deflate_bitstream& bitstream)
 {
-    Huffman_entry entry {decoding_table.entries[bitstream.peek_bits(decoding_table.first_area_bitwidth)]};
+    Huffman_entry entry;
+    if(bitstream.bits_remaining() < decoding_table.first_area_bitwidth) {
+        entry = decoding_table.entries[bitstream.peek_bits(bitstream.bits_remaining())];
+    }
+    else {
+        entry = decoding_table.entries[bitstream.peek_bits(decoding_table.first_area_bitwidth)];
+    }
+
     switch(entry.category) {
         case Huffman_entry::Category::symbol:
             bitstream.skip_bits(entry.bits_to_consume);
