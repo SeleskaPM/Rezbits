@@ -188,6 +188,8 @@ namespace rez::impl {
             // nothing
         }
 
+        void plug_source(std::span<const std::uint8_t> source) noexcept;
+
         std::int32_t read_bits(const int amount);
         std::int32_t peek_bits(const int amount);
         void skip_bits(const int amount);
@@ -202,7 +204,7 @@ namespace rez::impl {
 
         std::span<const std::uint8_t> m_source;
         std::int64_t m_current_byte_index {0};
-        const std::int64_t m_last_valid_index;
+        std::int64_t m_last_valid_index;
         std::int64_t m_bits_remaining;
         int m_useful_bits_in_current_byte {8};
     };
